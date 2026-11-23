@@ -1,0 +1,358 @@
+\documentclass[11pt]{article}
+
+\usepackage{fontspec}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{xurl}
+\usepackage{hyperref}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{longtable}
+\usepackage{xcolor}
+
+\setmainfont{Latin Modern Roman}
+\setmonofont{Latin Modern Mono}
+\setlength{\emergencystretch}{2em}
+% Permite cortar línea después de un guion bajo (nombres largos de pruebas)
+\let\guionbajo\_
+\renewcommand{\_}{\guionbajo\allowbreak}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  frame=single,
+  framesep=4pt,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  inputencoding=utf8,
+  extendedchars=true,
+  literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1 {ñ}{{\~n}}1
+}
+\lstdefinestyle{java}{
+  language=Java,
+  keywordstyle=\bfseries,
+  commentstyle=\itshape\color{gray!70!black},
+  numbers=left,
+  numberstyle=\scriptsize\color{gray},
+  numbersep=6pt,
+  xleftmargin=18pt
+}
+
+% Captura: usa capturas/#1 si existe; si no, deja el recuadro
+\graphicspath{{capturas/}}
+\newcommand{\captura}[2]{%
+  \begin{center}
+  \IfFileExists{capturas/#1}%
+    {\includegraphics[width=\linewidth,height=0.42\textheight,keepaspectratio]{#1}}%
+    {\fbox{\parbox[c][3cm][c]{0.9\linewidth}{\centering\small Captura pendiente: \texttt{capturas/#1}}}}\\[0.6em]
+  {\small #2}
+  \end{center}}
+
+% Encabezado de cada evidencia: número, título corto y puntos
+\newcommand{\evidencia}[3]{\subsection*{#1. #2 \hfill {\normalsize\mdseries (#3)}}}
+
+% Nombre de una prueba (se escribe con guiones bajos normales): puede cortarse en cada guion
+% bajo y antes de cada mayúscula del camelCase, para que los nombres largos no se salgan
+\directlua{dofile("prueba.lua")}
+\newcommand{\prueba}[1]{\texttt{\directlua{prueba("\luaescapestring{\detokenize{#1}}")}}}
+
+\newcommand{\repo}{https://github.com/Vethariel/Lab6-ingesoft2}
+
+\hypersetup{
+  pdftitle={Laboratorio 6. Testing},
+  pdfauthor={Daniel Alonso Gracia Pinto},
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=blue
+}
+
+\title{Laboratorio 6: Testing\\[0.35em]
+\large Pruebas unitarias e integración, TDD, cobertura y calidad\\[0.25em]
+\normalsize Ingeniería de Software II (2016702)}
+\author{Daniel Alonso Gracia Pinto}
+\date{Noviembre de 2026\\[0.35em]
+\normalsize Grupo 00}
+
+\begin{document}
+\maketitle
+\vspace{-1.6em}
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.4cm}>{\raggedright\arraybackslash}p{11.6cm}@{}}
+\hline
+Integrante & Daniel Alonso Gracia Pinto \\
+Grupo & 00 \\
+Proyecto & \texttt{Prestamos-00} \\
+Repositorio & \url{\repo} \\
+\hline
+\end{tabular}
+\end{center}
+
+El repositorio tiene el proyecto completo en \texttt{Prestamos-00/}, el historial de commits (incluidos los de los ciclos de TDD) y el \texttt{README.md} con los comandos para ejecutar las pruebas y la cobertura. Todas las capturas son de pantalla completa: en cada una se ven el nombre del proyecto \texttt{Prestamos-00} y la hora del sistema, en la esquina inferior derecha.
+
+\section*{Paso 0. Stack y proyecto}
+
+El grupo usa Java, el mismo lenguaje de los laboratorios 4 y 5, con Maven. Las cinco piezas son:
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.6cm}>{\raggedright\arraybackslash}p{6.4cm}>{\raggedright\arraybackslash}p{3.6cm}@{}}
+\hline
+Pieza & Herramienta & Versión \\
+\hline
+(1) Framework de pruebas & JUnit 5 (Jupiter) & 5.14.2 \\
+(2) Dobles de prueba & Mockito & 5.20.0 \\
+(3) Cliente HTTP y JSON & \texttt{java.net.http.HttpClient} (del JDK) y Gson & Gson 2.13.2 \\
+(4) Servidor HTTP de prueba & MockWebServer (OkHttp) & 5.3.0 \\
+(5) Cobertura & JaCoCo & 0.8.14 \\
+\hline
+\end{tabular}
+\end{center}
+
+El código de producción está en dos paquetes: \texttt{co.edu.unal.prestamos.domain}, que no depende de red, base de datos ni framework, y \texttt{co.edu.unal.prestamos.data}, con los adaptadores. Las pruebas siguen la misma estructura en \texttt{src/test/java}.
+
+\evidencia{E1}{Dependencias y prueba trivial en verde}{0,15}
+
+\captura{e1-a-dependencias.png}{E1 (a). \texttt{pom.xml}: las dependencias, cada una marcada con la pieza del stack que cubre.}
+
+\captura{e1-b-plugins.png}{E1 (b). \texttt{pom.xml}: Surefire, que ejecuta las pruebas, y JaCoCo, la herramienta de cobertura.}
+
+\captura{e1-c-prueba-trivial.png}{E1 (c). \texttt{mvn test} con la prueba trivial \texttt{EntornoTest} ($1 + 1 = 2$): \texttt{Tests run: 1, Failures: 0} y \texttt{BUILD SUCCESS}. Después se borró.}
+
+\evidencia{E2}{Estructura de carpetas y README}{0,15}
+
+\captura{e2-estructura-readme.png}{E2. A la izquierda, \texttt{domain} y \texttt{data} en \texttt{src/main} y en \texttt{src/test}. A la derecha, el \texttt{README.md} con la tabla del stack.}
+
+\section*{Parte 1. Pruebas unitarias del dominio}
+
+\texttt{Prestamo} es el agregado: guarda su estado y solo cambia si se cumplen las reglas. Si no se cumplen, lanza \texttt{IllegalStateException} con el mensaje del enunciado. Los 7 días del préstamo, los 7 de la renovación y el máximo de una renovación están en constantes (\texttt{DIAS\_DE\_PRESTAMO}, \texttt{DIAS\_DE\_RENOVACION}, \texttt{MAXIMO\_DE\_RENOVACIONES}). Las pruebas usan una fecha fija, \texttt{HOY = 2026-11-18}, y no la fecha del sistema, para que den siempre el mismo resultado.
+
+\evidencia{E3}{Código de las siete pruebas}{0,4}
+
+Cada prueba tiene sus bloques marcados con \texttt{// Arrange}, \texttt{// Act} y \texttt{// Assert}, y se llama \texttt{metodo\_escenario\_resultadoEsperado}. El Arrange común (un préstamo pendiente) está en el método \texttt{@BeforeEach}.
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.6cm}>{\raggedright\arraybackslash}p{9.2cm}>{\raggedright\arraybackslash}p{4.8cm}@{}}
+\hline
+ & Prueba & Escenario \\
+\hline
+-- & \prueba{aprobar_prestamoPendiente_quedaAprobadoConLimiteEnSieteDias} & Modelo del enunciado \\
+-- & \prueba{renovar_porSegundaVez_lanzaError} & Modelo del enunciado \\
+(a) & \prueba{renovar_prestamoAprobado_extiendeLimiteACatorceDias} & Límite en 2026-12-02 \\
+(b) & \prueba{aprobar_prestamoYaAprobado_lanzaError} & ``Solo se aprueba un préstamo pendiente'' \\
+(c) & \prueba{renovar_prestamoPendiente_lanzaErrorDePrestamoNoAprobado} & ``Solo se renueva un préstamo aprobado'' \\
+(d) & \prueba{devolver_prestamoAprobado_quedaDevuelto} & Estado \texttt{DEVUELTO} \\
+(e) & \prueba{devolver_prestamoYaDevuelto_lanzaError} & ``Solo se devuelve un préstamo aprobado'' \\
+\hline
+\end{tabular}
+\end{center}
+
+\captura{e3-a-pruebas.png}{E3 (a). \texttt{PrestamoTest}, líneas 1 a 45: la fecha fija, el \texttt{@BeforeEach} y las dos pruebas modelo.}
+
+\captura{e3-b-pruebas.png}{E3 (b). Líneas 45 a 87: escenarios (a), (b), (c) y el inicio de (d).}
+
+\captura{e3-c-pruebas.png}{E3 (c). Líneas 75 a 105: escenarios (d) y (e).}
+
+\evidencia{E4}{Las siete pruebas en verde}{0,3}
+
+\captura{e4-verde.png}{E4. \texttt{mvn test}: \texttt{PrestamoTest} con \texttt{Tests run: 7, Failures: 0} y \texttt{BUILD SUCCESS}.}
+
+\evidencia{E5}{La prueba que falla con 8 días}{0,3}
+
+\captura{e5-falla-ocho-dias.png}{E5. Con \texttt{DIAS\_DE\_PRESTAMO = 8}, fallan dos pruebas: \texttt{expected: <2026-11-25> but was: <2026-11-26>} y \texttt{expected: <2026-12-02> but was: <2026-12-03>}.}
+
+\textbf{Qué detectó la prueba:} \prueba{aprobar_prestamoPendiente_quedaAprobadoConLimiteEnSieteDias} detectó que, al aprobar, la fecha límite quedaba un día después de lo que dice la regla: esperaba el 25 de noviembre (7 días desde el 18) y obtuvo el 26. También falló la prueba de renovación, porque su fecha esperada (14 días) se calcula a partir de la misma aprobación. Después de la captura se restauró el valor 7.
+
+\section*{Parte 2. Desarrollo guiado por pruebas (TDD)}
+
+\texttt{CalculadoraMulta} se construyó en cuatro ciclos. En cada uno se escribió primero la prueba, se vio fallar por la razón esperada, se escribió el mínimo código para pasarla y después se mejoró el diseño. Las pruebas usan \texttt{LIMITE = 2026-11-25} y cuentan los días con \texttt{ChronoUnit.DAYS.between}, sin contarlos a mano.
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{1.2cm}>{\raggedright\arraybackslash}p{5.6cm}>{\raggedright\arraybackslash}p{7.8cm}@{}}
+\hline
+Ciclo & Prueba que lo inicia (rojo) & Código del verde \\
+\hline
+1 & \prueba{calcular_devueltoAntesDelLimite_noHayMulta} & \texttt{return 0;} \\
+2 & \prueba{calcular_unDiaDeRetraso_cobraDosMil} & Contar los días de retraso y multiplicar por 2000 \\
+3 & \prueba{calcular_cuarentaDiasDeRetraso_noPasaDelTope} & \texttt{Math.min(..., 50000)} \\
+4 & \prueba{calcular_monitorConTresDiasDeRetraso_pagaLaMitad} & Si es monitor, dividir entre 2 después del tope \\
+\hline
+\end{tabular}
+\end{center}
+
+Además de la prueba que inicia cada ciclo, se agregaron los casos límite del enunciado: devuelto exactamente el día límite (\$0), 25 días (\$50.000, justo el tope) y un monitor con 40 días (\$25.000). Esta última comprueba que la mitad se aplica \emph{después} del tope: si se aplicara antes, la multa sería $40 \times 1.000 = 40.000$.
+
+\evidencia{E6}{Rojo y verde del ciclo 1}{0,3}
+
+\captura{e6-a-ciclo1-rojo.png}{E6 (a). Rojo: la prueba existe pero \texttt{CalculadoraMulta} no. Como Java es compilado, el rojo es un error de compilación: \texttt{cannot find symbol: class CalculadoraMulta}.}
+
+\captura{e6-b-ciclo1-verde.png}{E6 (b). Verde: \texttt{CalculadoraMulta} con \texttt{return 0;}, lo mínimo para pasar. \texttt{Tests run: 8, Failures: 0}.}
+
+\evidencia{E7}{Rojo y verde de los ciclos 2, 3 y 4}{0,45}
+
+\captura{e7-a-ciclo2-rojo.png}{E7 (a). Ciclo 2, rojo: \prueba{calcular_unDiaDeRetraso_cobraDosMil} falla con \texttt{expected: <2000> but was: <0>}.}
+
+\captura{e7-b-ciclo2-verde.png}{E7 (b). Ciclo 2, verde: los días de retraso por 2000. \texttt{Tests run: 10, Failures: 0}.}
+
+\captura{e7-c-ciclo3-rojo.png}{E7 (c). Ciclo 3, rojo: \prueba{calcular_cuarentaDiasDeRetraso_noPasaDelTope} falla con \texttt{expected: <50000> but was: <80000>}. La de 25 días ya pasa.}
+
+\captura{e7-d-ciclo3-verde.png}{E7 (d). Ciclo 3, verde: \texttt{Math.min(diasDeRetraso * MULTA\_POR\_DIA, 50000)}. \texttt{Tests run: 12, Failures: 0}.}
+
+\captura{e7-e-ciclo4-rojo.png}{E7 (e). Ciclo 4, rojo: las dos pruebas de monitor fallan con \texttt{expected: <3000> but was: <6000>} y \texttt{expected: <25000> but was: <50000>}.}
+
+\captura{e7-f-ciclo4-verde.png}{E7 (f). Ciclo 4, verde: si es monitor, la multa con tope se divide entre 2. \texttt{Tests run: 14, Failures: 0}.}
+
+\evidencia{E8}{Historial de commits}{0,25}
+
+\captura{e8-git-log.png}{E8. \texttt{git log --oneline}: el ciclo 1 en verde y los ciclos 2, 3 y 4 con sus commits de rojo, verde y refactor, en ese orden.}
+
+Cada commit de rojo contiene la prueba nueva fallando; ningún commit de verde cambia las pruebas. Los commits de refactor son estos: en el ciclo 2, la constante \texttt{MULTA\_POR\_DIA} y la calculadora compartida por las pruebas; en el ciclo 3, la constante \texttt{MULTA\_MAXIMA}; en el ciclo 4, \texttt{SIN\_MULTA}, \texttt{DIVISOR\_MONITOR} y el método \texttt{multaConTope}.
+
+\evidencia{E9}{Código final de \texttt{CalculadoraMulta}}{0,2}
+
+\captura{e9-calculadora-final.png}{E9. \texttt{CalculadoraMulta} después del último refactor, sin números mágicos.}
+
+\lstinputlisting[style=java,firstline=6]{../Prestamos-00/src/main/java/co/edu/unal/prestamos/domain/CalculadoraMulta.java}
+
+\textbf{Cómo influyeron las pruebas en el diseño.} Escribir la prueba primero obligó a que \texttt{calcular} recibiera las dos fechas como parámetros, en lugar de leer la fecha del sistema, porque solo así la prueba puede fijar el resultado; el resultado es una función pura, sin estado, que se prueba sin preparar nada. Las pruebas de los casos límite (el día límite, 25 y 40 días) fijaron dónde va el \texttt{<=} y dónde se aplica el tope. La del monitor con 40 días fijó el orden de las reglas. Con todas en verde, el refactor pudo nombrar cada regla con una constante sin miedo a romperlas.
+
+\section*{Parte 3. Dobles de prueba}
+
+En \texttt{domain} están los contratos \texttt{DisponibilidadEquipos}, \texttt{PrestamoRepository} y \texttt{Notificador} (interfaces de Java), el error \texttt{EquipoNoDisponible} y el caso de uso \texttt{SolicitarPrestamo}, que recibe los tres contratos por constructor. Las pruebas crean los tres dobles con \texttt{mock(...)} de Mockito en un \texttt{@BeforeEach}; cada prueba configura con \texttt{when} o \texttt{doThrow} lo que necesita y al final comprueba las llamadas con \texttt{verify}.
+
+\evidencia{E10}{Código de las tres pruebas con dobles}{0,3}
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.6cm}>{\raggedright\arraybackslash}p{4.2cm}>{\raggedright\arraybackslash}p{4.8cm}@{}}
+\hline
+Prueba & Configuración & Verificación \\
+\hline
+\prueba{ejecutar_equipoDisponible_guardaYNotifica} & \texttt{estaDisponible(12)} $\to$ \texttt{true}; \texttt{siguienteId()} $\to$ \texttt{50} & Estado \texttt{PENDIENTE}; \texttt{guardar(p)} una vez; \texttt{notificar("1023", "Solicitud 50 registrada")} \\
+(a) \prueba{ejecutar_equipoNoDisponible_noGuardaNiNotifica} & \texttt{estaDisponible(12)} $\to$ \texttt{false} & Lanza \texttt{EquipoNoDisponible}; \texttt{guardar} nunca (\texttt{never()}); el notificador sin llamadas (\texttt{verifyNoInteractions}) \\
+(b) \prueba{ejecutar_falloAlGuardar_noNotifica} & \texttt{guardar(...)} lanza \texttt{RuntimeException("BD caída")} & El error se propaga con su mensaje; el notificador sin llamadas \\
+\hline
+\end{tabular}
+\end{center}
+
+\captura{e10-a-dobles.png}{E10 (a). \texttt{SolicitarPrestamoTest}: los imports de Mockito, la creación de los tres mocks y la primera prueba.}
+
+\captura{e10-b-dobles.png}{E10 (b). Las pruebas (a) y (b), con \texttt{doThrow}, \texttt{never()} y \texttt{verifyNoInteractions}.}
+
+\evidencia{E11}{Las tres pruebas en verde}{0,3}
+
+\captura{e11-verde.png}{E11. \texttt{mvn test}: \texttt{SolicitarPrestamoTest} con \texttt{Tests run: 3, Failures: 0}, junto con las del dominio (17 en total).}
+
+\evidencia{E12}{Qué verifica un mock y por qué se pueden usar dobles}{0,2}
+
+\textbf{¿Qué verifica un mock que no puede verificar una aserción sobre el valor de retorno?} Verifica el \emph{comportamiento} del caso de uso hacia afuera: a quién llamó, con qué argumentos, cuántas veces y a quién no llamó. Lo importante de \texttt{SolicitarPrestamo} son sus efectos: que el préstamo se guarde y que el estudiante reciba el aviso. Esos efectos no aparecen en el valor de retorno. La primera prueba podría devolver un préstamo correcto sin haberlo guardado nunca, y solo \texttt{verify(repositorio).guardar(p)} lo detecta. En las pruebas (a) y (b) ni siquiera hay valor de retorno, porque \texttt{ejecutar} lanza un error. Lo único que se puede comprobar es lo que \emph{no} pasó: que no se guardó (\texttt{never()}) y que no se notificó (\texttt{verifyNoInteractions}). Así se descarta, por ejemplo, avisarle al estudiante de una solicitud que la base de datos nunca registró.
+
+\textbf{¿Por qué es posible usar dobles aquí?} Por el principio de inversión de dependencias (DIP). \texttt{SolicitarPrestamo} no depende de clases concretas como un cliente HTTP o una base de datos, sino de tres interfaces que el propio dominio define y que recibe por constructor. En términos de arquitectura hexagonal, esas interfaces son los \emph{puertos} del dominio, y lo que las implementa (el adaptador HTTP de la Parte 4, un repositorio con base de datos, un servicio de correo) son los \emph{adaptadores}, que viven afuera, en \texttt{data}. El caso de uso no sabe qué adaptador tiene detrás, así que la prueba puede conectarle un mock en cada puerto. Si \texttt{SolicitarPrestamo} creara por dentro un \texttt{new DisponibilidadEquiposHttp(...)}, no habría forma de reemplazarlo, y probarlo exigiría la red.
+
+\section*{Parte 4. Pruebas de integración con un servidor HTTP de prueba}
+
+\texttt{DisponibilidadEquiposHttp}, en \texttt{data}, cumple el contrato \texttt{DisponibilidadEquipos} consultando \texttt{GET <urlBase>/api/v1/equipos/<id>} con \texttt{HttpClient} y convirtiendo el JSON con Gson. Recibe la URL base por constructor. Un 200 con \texttt{"estado": "disponible"} devuelve verdadero; un 200 con otro estado o un 404 devuelven falso; cualquier otro código lanza \texttt{ServicioNoDisponible("HTTP <código>")}, y un error de red lanza \texttt{ServicioNoDisponible} con el mensaje del error.
+
+\texttt{ServicioNoDisponible} está en \texttt{domain} y no en \texttt{data}: es parte del contrato del puerto, así que quien use el caso de uso puede atraparlo sin depender de la capa de infraestructura.
+
+Las pruebas no reemplazan el adaptador ni el cliente HTTP. Usan \textbf{MockWebServer}, un servidor HTTP real que escucha en un puerto local. Cada prueba lo inicia en \texttt{@BeforeEach}, le encola la respuesta y lo cierra en \texttt{@AfterEach}. La petición sale por el \texttt{HttpClient} real, viaja por la red local, y la respuesta pasa por Gson.
+
+\evidencia{E13}{Pruebas (a), (b) y (c) con MockWebServer}{0,35}
+
+\captura{e13-a-servidor.png}{E13 (a). \texttt{DisponibilidadEquiposHttpTest}: el servidor \texttt{MockWebServer}, el método \texttt{responder} que encola un \texttt{MockResponse} y la primera prueba, que con \texttt{takeRequest()} verifica el método \texttt{GET} y la ruta \texttt{/api/v1/equipos/12}.}
+
+\captura{e13-b-casos.png}{E13 (b). Los casos (a) 200 con \texttt{"prestado"} $\to$ falso, (b) 404 $\to$ falso y (c) 500 $\to$ \texttt{ServicioNoDisponible("HTTP 500")}.}
+
+\evidencia{E14}{Fake en memoria y prueba de extremo a extremo}{0,3}
+
+\captura{e14-a-fake.png}{E14 (a). \texttt{PrestamoRepositoryEnMemoria}: el fake es una lista y un contador. A diferencia de un mock, funciona de verdad: guarda y numera los préstamos.}
+
+\captura{e14-b-extremo.png}{E14 (b). \texttt{SolicitarPrestamoIntegracionTest}: \texttt{SolicitarPrestamo} con el adaptador HTTP real contra el servidor de prueba, el fake y un notificador mock. Verifica que el préstamo quedó guardado en el fake con id 1.}
+
+\evidencia{E15}{Todas las pruebas de \texttt{data} en verde}{0,2}
+
+\captura{e15-data-verde.png}{E15. \texttt{mvn test -Dtest='co.edu.unal.prestamos.data.**'}: \texttt{Tests run: 5, Failures: 0}.}
+
+\evidencia{E16}{Qué detecta esta prueba que los mocks nunca detectarían}{0,15}
+
+En la Parte 3, \texttt{DisponibilidadEquipos} es un mock que responde lo que la prueba le diga. El adaptador no se ejecuta, así que cualquier error que esté en él pasa sin que nadie lo note. La prueba con el servidor ejecuta el camino completo. Tres ejemplos concretos:
+
+\begin{enumerate}
+  \item \textbf{La ruta.} Si el adaptador armara mal la URL, el servidor real respondería 404, y el adaptador diría ``no disponible'' para todos los equipos. Pasaría, por ejemplo, con \texttt{/api/v1/equipo/12} (en singular) o con la barra doble de \texttt{urlBase} terminada en \texttt{/} seguida de \texttt{/api/v1/...}. Esto último no es hipotético: \texttt{servidor.url("/")} devuelve la URL con barra final, y por eso el constructor la quita. La primera prueba lo cubre, porque lee la petición con \texttt{takeRequest()} y compara la ruta exacta.
+  \item \textbf{El JSON.} Si la API devolviera \texttt{"status"} en lugar de \texttt{"estado"}, o \texttt{"Disponible"} con mayúscula, Gson dejaría el campo en \texttt{null} o con otro valor, y el adaptador devolvería falso sin lanzar ningún error. Con mocks nunca se convierte un JSON, así que este error solo aparece cuando una respuesta real pasa por Gson.
+  \item \textbf{Los códigos HTTP.} Confundir el 404 (``no existe'', se responde falso) con un error del servidor (se lanza \texttt{ServicioNoDisponible}) cambia lo que ve el estudiante. El mock del puerto solo devuelve \texttt{true} o \texttt{false} y nunca ve un código. Las pruebas (b) y (c) sí lo ven, y el tercer mutante de la Parte 5 (404 $\to$ 400) lo confirma: lo mata la prueba (b).
+\end{enumerate}
+
+\section*{Parte 5. Cobertura y calidad de las pruebas}
+
+\textbf{Medición inicial.} Con las pruebas de las partes 1 a 4, JaCoCo dio 94,7~\% de líneas en \texttt{domain} (54 de 57) y 76,0~\% en \texttt{data} (19 de 25). \texttt{domain} ya cumplía la meta, pero \texttt{data} no. El reporte mostraba sin ejecutar los dos \texttt{catch} del adaptador, y en el dominio, el constructor de \texttt{ServicioNoDisponible} con causa y \texttt{getEstudianteId()}.
+
+\textbf{Pruebas agregadas.} Se agregó \prueba{estaDisponible_servidorApagado_lanzaServicioNoDisponibleConElErrorDeRed}, que apaga el servidor antes de la petición: la conexión es rechazada y el adaptador debe convertir el \texttt{ConnectException} en \texttt{ServicioNoDisponible}. La prueba de extremo a extremo ahora también verifica el \texttt{estudianteId}. Resultado: \textbf{100~\% en \texttt{domain} (57 de 57) y 88~\% en \texttt{data} (22 de 25)}.
+
+Las 3 líneas que siguen sin cubrir son el \texttt{catch (InterruptedException)}, que solo se ejecuta si otro hilo interrumpe al que está esperando la respuesta. Provocarlo en una prueba exigiría coordinar dos hilos con tiempos, y el resultado sería una prueba frágil. No se forzó, porque la meta ya se cumple y lo que hace ese bloque (restaurar la marca de interrupción) es el patrón estándar.
+
+Para que la meta no dependa de revisar el reporte a mano, el \texttt{pom.xml} tiene la regla \texttt{check} de JaCoCo: \texttt{mvn verify} falla si \texttt{domain} baja de 90~\% o \texttt{data} de 80~\% de líneas.
+
+\evidencia{E17}{Resumen de cobertura que cumple la meta}{0,2}
+
+\captura{e17-cobertura.png}{E17. \texttt{mvn verify}: las 23 pruebas en verde, el reporte y la comprobación \texttt{jacoco:check} con \texttt{All coverage checks have been met.}}
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{3.4cm}>{\raggedright\arraybackslash}p{3.4cm}>{\raggedright\arraybackslash}p{3.2cm}@{}}
+\hline
+Paquete & Líneas & Ramas & Meta de líneas \\
+\hline
+\texttt{domain} & 57 de 57: 100~\% & 14 de 14: 100~\% & 90~\%: cumple \\
+\texttt{data} & 22 de 25: 88~\% & 6 de 8: 75~\% & 80~\%: cumple \\
+\hline
+\end{tabular}
+\end{center}
+
+\evidencia{E18}{Reporte HTML en el navegador}{0,15}
+
+\captura{e18-a-reporte.png}{E18 (a). \texttt{target/site/jacoco/index.html} en Firefox. Las columnas \emph{Missed} y \emph{Lines} dan las líneas: 3 sin ejecutar de 25 en \texttt{data} y 0 de 57 en \texttt{domain}. (La columna \emph{Cov.} de la izquierda es de instrucciones, no de líneas.)}
+
+\captura{e18-b-detalle.png}{E18 (b). El código de \texttt{DisponibilidadEquiposHttp} en el reporte: en verde lo ejecutado, en amarillo las ramas que se recorrieron en parte y en rojo el \texttt{catch (InterruptedException)}, lo único sin ejecutar.}
+
+\evidencia{E19}{Mutación manual}{0,2}
+
+Cada mutante se introdujo solo, se ejecutaron las 23 pruebas y se restauró el código con \texttt{git checkout}. En el código, la condición \texttt{renovaciones < 1} está escrita como \texttt{renovaciones >= MAXIMO\_DE\_RENOVACIONES}, con la constante en 1. El primer mutante cambia esa constante a 2, lo que equivale a \texttt{renovaciones < 2}.
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.8cm}>{\raggedright\arraybackslash}p{1.8cm}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{4.6cm}@{}}
+\hline
+Mutante & Resultado & Prueba que lo mata & Mensaje \\
+\hline
+\texttt{renovar}: \texttt{renovaciones < 1} $\to$ \texttt{< 2} & Muerto & \prueba{renovar_porSegundaVez_lanzaError} & \texttt{Expected IllegalStateException to be thrown, but nothing was thrown} \\
+\texttt{CalculadoraMulta}: tope \$50.000 $\to$ \$60.000 & Muerto & \prueba{calcular_cuarentaDiasDeRetraso_noPasaDelTope} y \prueba{calcular_monitorConCuarentaDiasDeRetraso_pagaLaMitadDelTope} & \texttt{expected: <50000> but was: <60000>} y \texttt{expected: <25000> but was: <30000>} \\
+Adaptador: \texttt{404} $\to$ \texttt{400} & Muerto & \prueba{estaDisponible_equipoInexistente404_devuelveFalso} & \texttt{ServicioNoDisponible: HTTP 404} \\
+\hline
+\end{tabular}
+\end{center}
+
+Ningún mutante sobrevivió, así que no hubo que escribir pruebas nuevas para matarlos. El segundo, sin embargo, muestra lo cerca que estuvo de sobrevivir: la prueba de 25 días también ejecuta la línea del tope, pero no lo mata, porque $25 \times 2.000 = 50.000$ queda por debajo de ambos topes. Lo matan solo las pruebas de 40 días, que se escribieron en la Parte 2 como casos límite.
+
+\captura{e19-mutante-tope.png}{E19. El mutante del tope: \texttt{MULTA\_MAXIMA = 60\_000} en el editor (marcado como modificado) y las dos pruebas de 40 días fallando. \texttt{BUILD FAILURE}: el mutante murió.}
+
+\evidencia{E20}{Por qué 100~\% de cobertura no garantiza que el código sea correcto}{0,15}
+
+La cobertura mide qué líneas se \emph{ejecutaron} durante las pruebas, no qué se \emph{verificó}. Una línea cuenta como cubierta aunque ninguna aserción compruebe su resultado.
+
+El segundo mutante lo muestra con este mismo proyecto. Si \texttt{CalculadoraMultaTest} tuviera solo las pruebas de 0, 1 y 25 días, todas las líneas de \texttt{CalculadoraMulta} se ejecutarían, incluida la del \texttt{Math.min} con el tope. El reporte marcaría 100~\%. Pero con el tope en \$60.000 esas pruebas seguirían en verde, porque ninguna llega a una multa que lo supere. El código estaría mal con 100~\% de cobertura. Lo que mató al mutante no fue ejecutar la línea, sino tener una prueba de 40 días con una aserción que distingue \$50.000 de \$60.000. Lo mismo pasa en el extremo: una prueba sin ninguna aserción también ``cubre'' líneas, sin verificar nada.
+
+Hay además errores que la cobertura no puede ver: si al código le falta una regla (por ejemplo, el descuento para monitores antes del ciclo 4), no hay líneas que dejar sin cubrir, y si una prueba tiene mal el valor esperado, la cobertura sale igual. Por eso la cobertura sirve para encontrar código que ninguna prueba toca, como el \texttt{catch} de la E18, y la mutación sirve para medir si las pruebas que sí lo tocan detectan los errores. En este proyecto, 100~\% de líneas en \texttt{domain} y los tres mutantes muertos dicen más juntos que cualquiera de los dos por separado.
+
+\section*{Entrega}
+
+El repositorio \url{\repo} contiene:
+
+\begin{description}
+  \raggedright
+  \item[\texttt{Prestamos-00/}.] El proyecto Maven: \texttt{domain} y \texttt{data} con sus pruebas (23 en total), y el \texttt{pom.xml} con el stack y las metas de cobertura.
+  \item[\texttt{Prestamos-00/README.md}.] La tabla del stack y los comandos: \texttt{mvn test} para las pruebas y \texttt{mvn verify} para la cobertura, cuyo reporte queda en \texttt{target/site/jacoco/index.html}. Solo se necesitan Java 17 o superior y Maven; las dependencias se descargan solas.
+  \item[El historial de commits.] Un commit por parte y, en la Parte 2, los commits \texttt{TDD ciclo N: rojo}, \texttt{verde} y \texttt{refactor} de la E8.
+  \item[\texttt{docs/informe.pdf}.] Este informe. Su fuente está en \texttt{latex/}.
+\end{description}
+
+\end{document}
